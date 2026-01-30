@@ -4,17 +4,56 @@ import { Button } from '@/components/ui/button';
 import { GlassCard, GlassCardHeader, GlassCardContent } from '@/components/ui/GlassCard';
 import { useToast } from '@/hooks/use-toast';
 
+interface ActionControlsProps {
+  disabled?: boolean;
+  onSendOtp?: () => void;
+  onRequestDocument?: () => void;
+  onOverride?: () => void;
+  onInjectChallenge?: () => void;
+}
+
 const actions = [
-  { icon: Send, label: 'SEND OTP', description: 'SMS verification code', variant: 'default' as const },
-  { icon: FileText, label: 'REQUEST DOCUMENT', description: 'ID verification', variant: 'secondary' as const },
-  { icon: RefreshCw, label: 'OVERRIDE', description: 'Manual approval', variant: 'outline' as const },
-  { icon: Mic, label: 'INJECT CHALLENGE', description: 'Voice liveness test', variant: 'destructive' as const },
+  { id: 'otp', icon: Send, label: 'SEND OTP', description: 'SMS verification code', variant: 'default' as const },
+  { id: 'document', icon: FileText, label: 'REQUEST DOCUMENT', description: 'ID verification', variant: 'secondary' as const },
+  { id: 'override', icon: RefreshCw, label: 'OVERRIDE', description: 'Manual approval', variant: 'outline' as const },
+  { id: 'challenge', icon: Mic, label: 'INJECT CHALLENGE', description: 'Voice liveness test', variant: 'destructive' as const },
 ];
 
-export const ActionControls = () => {
+export const ActionControls = ({ 
+  disabled = false,
+  onSendOtp,
+  onRequestDocument,
+  onOverride,
+  onInjectChallenge
+}: ActionControlsProps) => {
   const { toast } = useToast();
 
-  const handleAction = (label: string) => {
+  const handleAction = (actionId: string, label: string) => {
+    if (disabled) {
+      toast({
+        title: 'NO ACTIVE CALL',
+        description: 'Wait for a call connection before taking action.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Call the appropriate handler
+    switch (actionId) {
+      case 'otp':
+        onSendOtp?.();
+        break;
+      case 'document':
+        onRequestDocument?.();
+        break;
+      case 'override':
+        onOverride?.();
+        break;
+      case 'challenge':
+        onInjectChallenge?.();
+        break;
+    }
+
     toast({
       title: `${label} INITIATED`,
       description: 'Action has been triggered successfully.',
@@ -34,15 +73,16 @@ export const ActionControls = () => {
         >
           {actions.map((action, i) => (
             <motion.div
-              key={action.label}
+              key={action.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
             >
               <Button
                 variant={action.variant}
-                className="w-full h-auto flex flex-col items-center gap-2 py-4 font-mono"
-                onClick={() => handleAction(action.label)}
+                disabled={disabled}
+                className="w-full h-auto flex flex-col items-center gap-2 py-4 font-mono disabled:opacity-50"
+                onClick={() => handleAction(action.id, action.label)}
               >
                 <action.icon className="w-5 h-5" />
                 <span className="text-xs tracking-wider">{action.label}</span>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Navbar } from '@/components/layout/Navbar';
 import { CallerProfile } from '@/components/dashboard/CallerProfile';
@@ -5,7 +6,8 @@ import { RiskPanel } from '@/components/dashboard/RiskPanel';
 import { ActionControls } from '@/components/dashboard/ActionControls';
 import { RecentCalls } from '@/components/dashboard/RecentCalls';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Headphones, Radio } from 'lucide-react';
+import { Headphones, Radio, PhoneOff } from 'lucide-react';
+import { CallerData, RiskData, CallRecord } from '@/types/dashboard';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -21,6 +23,36 @@ const itemVariants = {
 };
 
 const Dashboard = () => {
+  // State for live data - initially null/empty, will be populated by API
+  const [currentCaller, setCurrentCaller] = useState<CallerData | null>(null);
+  const [riskData, setRiskData] = useState<RiskData | null>(null);
+  const [recentCalls, setRecentCalls] = useState<CallRecord[]>([]);
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [callDuration, setCallDuration] = useState('00:00');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // TODO: Replace with real-time data fetching
+  // useEffect(() => {
+  //   const fetchDashboardData = async () => {
+  //     setIsLoading(true);
+  //     try {
+  //       // Fetch current call data
+  //       // Fetch recent calls
+  //       // Subscribe to real-time updates
+  //     } catch (error) {
+  //       console.error('Failed to fetch dashboard data:', error);
+  //     } finally {
+  //       setIsLoading(false);
+  //     }
+  //   };
+  //   fetchDashboardData();
+  // }, []);
+
+  const handleCallClick = (callId: string) => {
+    // Navigate to call detail or load call data
+    console.log('Call clicked:', callId);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -43,7 +75,11 @@ const Dashboard = () => {
                 <Radio className="w-4 h-4 text-success animate-pulse" />
                 <span className="text-xs font-mono text-muted-foreground">SYSTEM ONLINE</span>
               </div>
-              <StatusBadge status="info" label="CALL IN PROGRESS" pulse />
+              {isCallActive ? (
+                <StatusBadge status="info" label="CALL IN PROGRESS" pulse />
+              ) : (
+                <StatusBadge status="medium" label="AWAITING CALL" />
+              )}
             </div>
           </motion.div>
 
@@ -56,13 +92,13 @@ const Dashboard = () => {
           >
             {/* Left Column - Caller Info & Controls */}
             <motion.div variants={itemVariants} className="space-y-6">
-              <CallerProfile />
-              <ActionControls />
+              <CallerProfile caller={currentCaller} isLoading={isLoading} />
+              <ActionControls disabled={!isCallActive} />
             </motion.div>
 
             {/* Center Column - Risk Analysis */}
             <motion.div variants={itemVariants} className="lg:col-span-1">
-              <RiskPanel />
+              <RiskPanel data={riskData} isLoading={isLoading} />
             </motion.div>
 
             {/* Right Column - Recent Activity */}
@@ -71,21 +107,35 @@ const Dashboard = () => {
               <div className="glass-card p-4 rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <Headphones className="w-8 h-8 text-primary" />
-                    <motion.div
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full"
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                    />
+                    {isCallActive ? (
+                      <>
+                        <Headphones className="w-8 h-8 text-primary" />
+                        <motion.div
+                          className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full"
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 1, repeat: Infinity }}
+                        />
+                      </>
+                    ) : (
+                      <PhoneOff className="w-8 h-8 text-muted-foreground" />
+                    )}
                   </div>
                   <div>
-                    <p className="font-display text-lg tracking-wider">CALL ACTIVE</p>
-                    <p className="text-xs font-mono text-muted-foreground">02:34 ELAPSED</p>
+                    <p className="font-display text-lg tracking-wider">
+                      {isCallActive ? 'CALL ACTIVE' : 'NO ACTIVE CALL'}
+                    </p>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {isCallActive ? `${callDuration} ELAPSED` : 'WAITING FOR CONNECTION'}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <RecentCalls />
+              <RecentCalls 
+                calls={recentCalls} 
+                isLoading={isLoading}
+                onCallClick={handleCallClick}
+              />
             </motion.div>
           </motion.div>
         </div>
