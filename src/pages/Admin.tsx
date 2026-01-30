@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Navbar } from '@/components/layout/Navbar';
 import { GlassCard, GlassCardHeader, GlassCardContent } from '@/components/ui/GlassCard';
@@ -5,36 +6,98 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Settings, Sliders, AlertTriangle, Mic, Volume2, Save } from 'lucide-react';
-import { useState } from 'react';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { AdminConfig, AdminThresholds, AdminWeights, AdminSettings } from '@/types/dashboard';
+import { Settings, Sliders, AlertTriangle, Mic, Volume2, Save, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+// Default values - will be replaced by API data
+const defaultThresholds: AdminThresholds = {
+  lowRisk: 25,
+  mediumRisk: 50,
+  highRisk: 75,
+};
+
+const defaultWeights: AdminWeights = {
+  cognitive: 25,
+  behavioral: 30,
+  environmental: 20,
+  liveness: 25,
+};
+
+const defaultSettings: AdminSettings = {
+  autoEscalate: true,
+  challengeInjection: true,
+  replayDetection: true,
+  ttsDetection: true,
+};
 
 const Admin = () => {
   const { toast } = useToast();
-  const [thresholds, setThresholds] = useState({
-    lowRisk: 25,
-    mediumRisk: 50,
-    highRisk: 75,
-  });
-  const [weights, setWeights] = useState({
-    cognitive: 25,
-    behavioral: 30,
-    environmental: 20,
-    liveness: 25,
-  });
-  const [settings, setSettings] = useState({
-    autoEscalate: true,
-    challengeInjection: true,
-    replayDetection: true,
-    ttsDetection: true,
-  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // State initialized with defaults - will be replaced by API data
+  const [thresholds, setThresholds] = useState<AdminThresholds>(defaultThresholds);
+  const [weights, setWeights] = useState<AdminWeights>(defaultWeights);
+  const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
 
-  const handleSave = () => {
-    toast({
-      title: 'CONFIGURATION SAVED',
-      description: 'System settings have been updated successfully.',
-    });
+  // TODO: Replace with real data fetching
+  // useEffect(() => {
+  //   const fetchConfig = async () => {
+  //     setIsLoading(true);
+  //     try {
+  //       // Fetch admin config from API
+  //       // const response = await supabase.from('admin_config').select('*');
+  //       // setThresholds(response.data.thresholds);
+  //       // setWeights(response.data.weights);
+  //       // setSettings(response.data.settings);
+  //     } catch (error) {
+  //       console.error('Failed to fetch config:', error);
+  //     } finally {
+  //       setIsLoading(false);
+  //     }
+  //   };
+  //   fetchConfig();
+  // }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // TODO: Save config to API
+      // await supabase.from('admin_config').upsert({
+      //   thresholds,
+      //   weights,
+      //   settings
+      // });
+      
+      toast({
+        title: 'CONFIGURATION SAVED',
+        description: 'System settings have been updated successfully.',
+      });
+    } catch (error) {
+      toast({
+        title: 'SAVE FAILED',
+        description: 'Failed to save configuration. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="pt-20 pb-8 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto">
+            <LoadingState message="LOADING CONFIGURATION..." />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -52,9 +115,9 @@ const Admin = () => {
               <h1 className="font-display text-3xl sm:text-4xl tracking-wider">ADMIN PANEL</h1>
               <p className="text-sm font-mono text-muted-foreground mt-1">SYSTEM CONFIGURATION</p>
             </div>
-            <Button onClick={handleSave} className="font-mono text-xs gap-2">
-              <Save className="w-4 h-4" />
-              SAVE CHANGES
+            <Button onClick={handleSave} disabled={isSaving} className="font-mono text-xs gap-2">
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
             </Button>
           </motion.div>
 

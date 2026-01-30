@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Navbar } from '@/components/layout/Navbar';
 import { GlassCard, GlassCardHeader, GlassCardContent } from '@/components/ui/GlassCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { mockRecentCalls } from '@/data/mockData';
-import { Phone, Search, Filter, ArrowUpDown } from 'lucide-react';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { CallRecord } from '@/types/dashboard';
+import { Phone, Search, Filter, ArrowUpDown, PhoneOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -19,21 +22,37 @@ const getStatusType = (status: string) => {
     case 'completed': return 'success';
     case 'flagged': return 'warning';
     case 'escalated': return 'critical';
+    case 'in_progress': return 'info';
     default: return 'info';
   }
 };
 
-// Expanded mock calls for the calls page
-const expandedCalls = [
-  ...mockRecentCalls,
-  { id: 'CALL-9816', caller: 'David Miller', risk: 15, status: 'completed', time: '09:42 AM' },
-  { id: 'CALL-9815', caller: 'Jennifer Davis', risk: 56, status: 'flagged', time: '09:28 AM' },
-  { id: 'CALL-9814', caller: 'Christopher Lee', risk: 8, status: 'completed', time: '09:15 AM' },
-  { id: 'CALL-9813', caller: 'Amanda Wilson', risk: 82, status: 'escalated', time: '09:01 AM' },
-  { id: 'CALL-9812', caller: 'James Taylor', risk: 29, status: 'completed', time: '08:48 AM' },
-];
-
 const Calls = () => {
+  // State for live data - initially empty, will be populated by API
+  const [calls, setCalls] = useState<CallRecord[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // TODO: Replace with real data fetching
+  // useEffect(() => {
+  //   const fetchCalls = async () => {
+  //     setIsLoading(true);
+  //     try {
+  //       // Fetch calls from API
+  //     } catch (error) {
+  //       console.error('Failed to fetch calls:', error);
+  //     } finally {
+  //       setIsLoading(false);
+  //     }
+  //   };
+  //   fetchCalls();
+  // }, []);
+
+  const filteredCalls = calls.filter(call => 
+    call.caller.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    call.id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -61,6 +80,8 @@ const Calls = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Search by caller name or ID..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 font-mono text-sm bg-muted/30"
               />
             </div>
@@ -85,43 +106,56 @@ const Calls = () => {
                 <div className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-primary" />
                   <span className="font-mono text-xs tracking-wider text-muted-foreground">
-                    {expandedCalls.length} CALLS TODAY
+                    {calls.length} CALLS TODAY
                   </span>
                 </div>
               </GlassCardHeader>
               <GlassCardContent className="p-0 overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">CALL ID</th>
-                      <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">CALLER</th>
-                      <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">RISK</th>
-                      <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">STATUS</th>
-                      <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">TIME</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expandedCalls.map((call, i) => (
-                      <motion.tr
-                        key={call.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 + i * 0.03 }}
-                        className="border-b border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
-                      >
-                        <td className="px-4 py-3 font-mono text-sm text-primary">{call.id}</td>
-                        <td className="px-4 py-3 text-sm">{call.caller}</td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={getRiskStatus(call.risk)} label={`${call.risk}`} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={getStatusType(call.status) as any} label={call.status.toUpperCase()} />
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{call.time}</td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+                {isLoading ? (
+                  <LoadingState message="LOADING CALL HISTORY..." />
+                ) : filteredCalls.length === 0 ? (
+                  <EmptyState 
+                    icon={PhoneOff}
+                    title={calls.length === 0 ? "NO CALLS RECORDED" : "NO MATCHING CALLS"}
+                    description={calls.length === 0 
+                      ? "Call records will appear here as calls are processed" 
+                      : "Try adjusting your search criteria"
+                    }
+                  />
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">CALL ID</th>
+                        <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">CALLER</th>
+                        <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">RISK</th>
+                        <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">STATUS</th>
+                        <th className="text-left px-4 py-3 text-xs font-mono text-muted-foreground tracking-wider">TIME</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCalls.map((call, i) => (
+                        <motion.tr
+                          key={call.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 + i * 0.03 }}
+                          className="border-b border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
+                        >
+                          <td className="px-4 py-3 font-mono text-sm text-primary">{call.id}</td>
+                          <td className="px-4 py-3 text-sm">{call.caller}</td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={getRiskStatus(call.risk)} label={`${call.risk}`} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={getStatusType(call.status) as any} label={call.status.toUpperCase()} />
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{call.time}</td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </GlassCardContent>
             </GlassCard>
           </motion.div>
