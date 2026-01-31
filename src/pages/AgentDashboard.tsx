@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { CallerProfile } from '@/components/dashboard/CallerProfile';
 import { RiskPanel } from '@/components/dashboard/RiskPanel';
 import { ActionControls } from '@/components/dashboard/ActionControls';
 import { RecentCalls } from '@/components/dashboard/RecentCalls';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Headphones, Radio, PhoneOff } from 'lucide-react';
+import { Headphones, Radio, PhoneOff, Users, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { CallerData, RiskData, CallRecord } from '@/types/dashboard';
+import { GlassCard, GlassCardContent } from '@/components/ui/GlassCard';
+import { supabase } from '@/integrations/supabase/client';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -22,42 +25,51 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
-const Dashboard = () => {
-  // State for live data - initially null/empty, will be populated by API
+const AgentDashboard = () => {
+  const navigate = useNavigate();
   const [currentCaller, setCurrentCaller] = useState<CallerData | null>(null);
   const [riskData, setRiskData] = useState<RiskData | null>(null);
   const [recentCalls, setRecentCalls] = useState<CallRecord[]>([]);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callDuration, setCallDuration] = useState('00:00');
   const [isLoading, setIsLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string>('agent');
 
-  // TODO: Replace with real-time data fetching
-  // useEffect(() => {
-  //   const fetchDashboardData = async () => {
-  //     setIsLoading(true);
-  //     try {
-  //       // Fetch current call data
-  //       // Fetch recent calls
-  //       // Subscribe to real-time updates
-  //     } catch (error) {
-  //       console.error('Failed to fetch dashboard data:', error);
-  //     } finally {
-  //       setIsLoading(false);
-  //     }
-  //   };
-  //   fetchDashboardData();
-  // }, []);
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      
+      const savedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
+      setUserRole(savedRole);
+      
+      // Redirect admin to admin dashboard
+      if (savedRole === 'admin') {
+        navigate('/admin');
+      }
+    };
+    checkAuth();
+  }, [navigate]);
 
   const handleCallClick = (callId: string) => {
-    // Navigate to call detail or load call data
     console.log('Call clicked:', callId);
   };
+
+  // Stats for the agent
+  const agentStats = [
+    { label: 'CALLS TODAY', value: '0', icon: Headphones, color: 'text-primary' },
+    { label: 'FLAGGED', value: '0', icon: AlertTriangle, color: 'text-warning' },
+    { label: 'VERIFIED', value: '0', icon: CheckCircle, color: 'text-success' },
+    { label: 'AVG DURATION', value: '--:--', icon: Clock, color: 'text-muted-foreground' },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      {/* Main Content */}
       <main className="pt-20 pb-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
@@ -68,7 +80,7 @@ const Dashboard = () => {
           >
             <div>
               <h1 className="font-display text-3xl sm:text-4xl tracking-wider">AGENT DASHBOARD</h1>
-              <p className="text-sm font-mono text-muted-foreground mt-1">LIVE CALL MONITORING</p>
+              <p className="text-sm font-mono text-muted-foreground mt-1">LIVE CALL MONITORING & FRAUD DETECTION</p>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -81,6 +93,25 @@ const Dashboard = () => {
                 <StatusBadge status="medium" label="AWAITING CALL" />
               )}
             </div>
+          </motion.div>
+
+          {/* Stats Row */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+          >
+            {agentStats.map((stat) => (
+              <GlassCard key={stat.label} variant="default">
+                <GlassCardContent className="p-4 flex items-center gap-3">
+                  <stat.icon className={`w-8 h-8 ${stat.color}`} />
+                  <div>
+                    <p className="font-display text-2xl tracking-wider">{stat.value}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground">{stat.label}</p>
+                  </div>
+                </GlassCardContent>
+              </GlassCard>
+            ))}
           </motion.div>
 
           {/* Dashboard Grid */}
@@ -144,4 +175,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default AgentDashboard;

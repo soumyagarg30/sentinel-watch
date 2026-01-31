@@ -1,65 +1,79 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, ArrowRight, Loader2 } from 'lucide-react';
+import { Shield, ArrowRight, Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { GlassCard, GlassCardContent } from '@/components/ui/GlassCard';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { lovable } from '@/integrations/lovable';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { z } from 'zod';
 
 const roles = [
-  { id: 'agent', label: 'AGENT', description: 'Handle live calls' },
-  { id: 'supervisor', label: 'SUPERVISOR', description: 'Monitor team performance' },
-  { id: 'admin', label: 'ADMIN', description: 'System configuration' },
-  { id: 'ml-engineer', label: 'ML ENGINEER', description: 'Model analytics' },
+  { id: 'agent', label: 'AGENT', description: 'Handle live calls & monitoring' },
+  { id: 'admin', label: 'ADMIN', description: 'System configuration & management' },
 ];
+
+const emailSchema = z.string().trim().email({ message: "Invalid email address" });
+const passwordSchema = z.string().min(6, { message: "Password must be at least 6 characters" });
 
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [selectedRole, setSelectedRole] = useState('agent');
   const [isLoading, setIsLoading] = useState(false);
+  const [authTab, setAuthTab] = useState<'login' | 'signup'>('login');
+  
+  // Email/Password fields
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
 
+  // Sign out on mount to always ask for login
   useEffect(() => {
-    // Check if user is already logged in
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Sync user to MongoDB
-        await syncUserToMongoDB(session);
-        navigate('/dashboard');
-      }
+    const signOutAndClear = async () => {
+      await supabase.auth.signOut();
+      localStorage.removeItem('voicesentinel_selected_role');
     };
-    checkSession();
+    signOutAndClear();
+  }, []);
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        // Sync user to MongoDB after login
-        setTimeout(() => {
-          syncUserToMongoDB(session);
-        }, 0);
-        navigate('/dashboard');
-      }
-    });
+  const validateForm = () => {
+    const newErrors: typeof errors = {};
+    
+    const emailResult = emailSchema.safeParse(email);
+    if (!emailResult.success) {
+      newErrors.email = emailResult.error.errors[0].message;
+    }
+    
+    const passwordResult = passwordSchema.safeParse(password);
+    if (!passwordResult.success) {
+      newErrors.password = passwordResult.error.errors[0].message;
+    }
+    
+    if (authTab === 'signup' && password !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
-
-  const syncUserToMongoDB = async (session: { access_token: string; user: { email?: string; user_metadata?: { full_name?: string; avatar_url?: string } } }) => {
+  const syncUserToMongoDB = async (session: { access_token: string; user: { email?: string; user_metadata?: { full_name?: string; avatar_url?: string } } }, provider: string) => {
     try {
-      const selectedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
-      
       const response = await supabase.functions.invoke('sync-user-mongodb', {
         body: {
           action: 'sync_login',
           userData: {
             email: session.user.email,
-            name: session.user.user_metadata?.full_name,
+            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
             avatar_url: session.user.user_metadata?.avatar_url,
             role: selectedRole,
-            provider: 'google',
+            provider: provider,
           }
         }
       });
@@ -74,10 +88,17 @@ const Login = () => {
     }
   };
 
+  const navigateByRole = () => {
+    if (selectedRole === 'admin') {
+      navigate('/admin');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      // Store selected role in localStorage for later use
       localStorage.setItem('voicesentinel_selected_role', selectedRole);
       
       const result = await lovable.auth.signInWithOAuth('google', {
@@ -101,6 +122,92 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+
+  const handleEmailAuth = async () => {
+    if (!validateForm()) return;
+    
+    setIsLoading(true);
+    try {
+      localStorage.setItem('voicesentinel_selected_role', selectedRole);
+      
+      if (authTab === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin + '/login'
+          }
+        });
+        
+        if (error) {
+          toast({
+            title: "Sign Up Failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else if (data.session) {
+          await syncUserToMongoDB(data.session, 'email');
+          toast({
+            title: "Account Created",
+            description: "Welcome to VoiceSentinel!",
+          });
+          navigateByRole();
+        } else {
+          toast({
+            title: "Check Your Email",
+            description: "Please verify your email address to continue",
+          });
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (error) {
+          toast({
+            title: "Login Failed",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else if (data.session) {
+          await syncUserToMongoDB(data.session, 'email');
+          navigateByRole();
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle OAuth redirect callback
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const savedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
+        setSelectedRole(savedRole);
+        await syncUserToMongoDB(session, 'google');
+        if (savedRole === 'admin') {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+      }
+    };
+
+    // Check URL for auth callback
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    if (hashParams.get('access_token')) {
+      handleAuthCallback();
+    }
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
@@ -176,11 +283,141 @@ const Login = () => {
                   </div>
                 </div>
 
+                {/* Auth Tabs */}
+                <Tabs value={authTab} onValueChange={(v) => setAuthTab(v as 'login' | 'signup')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="login" className="font-mono text-xs">LOGIN</TabsTrigger>
+                    <TabsTrigger value="signup" className="font-mono text-xs">SIGN UP</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="login" className="space-y-4 mt-4">
+                    {/* Email */}
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          type="email"
+                          placeholder="Email address"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="pl-10 font-mono text-sm"
+                        />
+                      </div>
+                      {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+                    </div>
+                    
+                    {/* Password */}
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="pl-10 pr-10 font-mono text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+                    </div>
+                    
+                    <Button 
+                      onClick={handleEmailAuth}
+                      disabled={isLoading}
+                      className="w-full font-mono text-sm tracking-wider gap-2 h-11"
+                    >
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                      {isLoading ? 'AUTHENTICATING...' : 'LOGIN'}
+                    </Button>
+                  </TabsContent>
+                  
+                  <TabsContent value="signup" className="space-y-4 mt-4">
+                    {/* Email */}
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          type="email"
+                          placeholder="Email address"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="pl-10 font-mono text-sm"
+                        />
+                      </div>
+                      {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+                    </div>
+                    
+                    {/* Password */}
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="pl-10 pr-10 font-mono text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+                    </div>
+                    
+                    {/* Confirm Password */}
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Confirm password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="pl-10 font-mono text-sm"
+                        />
+                      </div>
+                      {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword}</p>}
+                    </div>
+                    
+                    <Button 
+                      onClick={handleEmailAuth}
+                      disabled={isLoading}
+                      className="w-full font-mono text-sm tracking-wider gap-2 h-11"
+                    >
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                      {isLoading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT'}
+                    </Button>
+                  </TabsContent>
+                </Tabs>
+
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground font-mono">OR</span>
+                  </div>
+                </div>
+
                 {/* Google Sign In */}
                 <Button 
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="w-full font-mono text-sm tracking-wider gap-3 h-12"
+                  variant="outline"
+                  className="w-full font-mono text-sm tracking-wider gap-3 h-11"
                 >
                   {isLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -204,12 +441,11 @@ const Login = () => {
                       />
                     </svg>
                   )}
-                  {isLoading ? 'AUTHENTICATING...' : 'SIGN IN WITH GOOGLE'}
-                  {!isLoading && <ArrowRight className="w-4 h-4" />}
+                  CONTINUE WITH GOOGLE
                 </Button>
 
                 <p className="text-[10px] font-mono text-muted-foreground text-center">
-                  Your selected role will be applied after authentication
+                  Your selected role determines your dashboard access
                 </p>
               </div>
             </GlassCardContent>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { GlassCard, GlassCardHeader, GlassCardContent } from '@/components/ui/GlassCard';
 import { Slider } from '@/components/ui/slider';
@@ -8,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { AdminConfig, AdminThresholds, AdminWeights, AdminSettings } from '@/types/dashboard';
-import { Settings, Sliders, AlertTriangle, Mic, Volume2, Save, Loader2 } from 'lucide-react';
+import { Settings, Sliders, AlertTriangle, Mic, Volume2, Save, Loader2, Users, Shield, Activity } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 // Default values - will be replaced by API data
 const defaultThresholds: AdminThresholds = {
@@ -33,6 +35,7 @@ const defaultSettings: AdminSettings = {
 };
 
 const Admin = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,6 +44,25 @@ const Admin = () => {
   const [thresholds, setThresholds] = useState<AdminThresholds>(defaultThresholds);
   const [weights, setWeights] = useState<AdminWeights>(defaultWeights);
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
+
+  // Auth check - redirect non-admins
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      
+      const savedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
+      
+      // Redirect non-admins to agent dashboard
+      if (savedRole !== 'admin') {
+        navigate('/dashboard');
+      }
+    };
+    checkAuth();
+  }, [navigate]);
 
   // TODO: Replace with real data fetching
   // useEffect(() => {
