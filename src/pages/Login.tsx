@@ -26,6 +26,8 @@ const Login = () => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
+        // Sync user to MongoDB
+        await syncUserToMongoDB(session);
         navigate('/dashboard');
       }
     };
@@ -34,12 +36,43 @@ const Login = () => {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        // Sync user to MongoDB after login
+        setTimeout(() => {
+          syncUserToMongoDB(session);
+        }, 0);
         navigate('/dashboard');
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const syncUserToMongoDB = async (session: { access_token: string; user: { email?: string; user_metadata?: { full_name?: string; avatar_url?: string } } }) => {
+    try {
+      const selectedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
+      
+      const response = await supabase.functions.invoke('sync-user-mongodb', {
+        body: {
+          action: 'sync_login',
+          userData: {
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name,
+            avatar_url: session.user.user_metadata?.avatar_url,
+            role: selectedRole,
+            provider: 'google',
+          }
+        }
+      });
+
+      if (response.error) {
+        console.error('Failed to sync user to MongoDB:', response.error);
+      } else {
+        console.log('User synced to MongoDB:', response.data);
+      }
+    } catch (error) {
+      console.error('Error syncing user to MongoDB:', error);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
