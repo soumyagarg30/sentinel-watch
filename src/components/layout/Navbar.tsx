@@ -1,9 +1,12 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Shield, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { Shield, Menu, X, LogOut, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import type { User } from '@supabase/supabase-js';
 
 const navLinks = [
   { href: '/', label: 'HOME' },
@@ -15,7 +18,54 @@ const navLinks = [
 
 export const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        toast({
+          title: "Logout Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        localStorage.removeItem('voicesentinel_selected_role');
+        toast({
+          title: "Logged Out",
+          description: "You have been successfully logged out",
+        });
+        navigate('/login');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50">
@@ -61,11 +111,33 @@ export const Navbar = () => {
 
           {/* Auth Button */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/login">
-              <Button variant="outline" size="sm" className="font-mono text-xs tracking-wider">
-                LOGIN
-              </Button>
-            </Link>
+            {user ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-muted-foreground truncate max-w-32">
+                  {user.email}
+                </span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="font-mono text-xs tracking-wider gap-2"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <LogOut className="w-3 h-3" />
+                  )}
+                  LOGOUT
+                </Button>
+              </div>
+            ) : (
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="font-mono text-xs tracking-wider">
+                  LOGIN
+                </Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -103,11 +175,31 @@ export const Navbar = () => {
                   {link.label}
                 </Link>
               ))}
-              <Link to="/login" onClick={() => setMobileOpen(false)}>
-                <Button variant="outline" size="sm" className="w-full mt-4 font-mono text-xs tracking-wider">
-                  LOGIN
+              {user ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-4 font-mono text-xs tracking-wider gap-2"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    handleLogout();
+                  }}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <LogOut className="w-3 h-3" />
+                  )}
+                  LOGOUT
                 </Button>
-              </Link>
+              ) : (
+                <Link to="/login" onClick={() => setMobileOpen(false)}>
+                  <Button variant="outline" size="sm" className="w-full mt-4 font-mono text-xs tracking-wider">
+                    LOGIN
+                  </Button>
+                </Link>
+              )}
             </div>
           </motion.div>
         )}
