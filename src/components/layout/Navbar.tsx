@@ -8,14 +8,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { User } from '@supabase/supabase-js';
 
-const navLinks = [
-  { href: '/', label: 'HOME' },
-  { href: '/dashboard', label: 'DASHBOARD' },
-  { href: '/calls', label: 'CALLS' },
-  { href: '/monitoring', label: 'MONITORING' },
-  { href: '/admin', label: 'ADMIN' },
-];
-
 export const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -23,6 +15,7 @@ export const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [userRole, setUserRole] = useState<string>('agent');
 
   useEffect(() => {
     // Get initial session
@@ -35,8 +28,29 @@ export const Navbar = () => {
       setUser(session?.user ?? null);
     });
 
+    // Get user role
+    const savedRole = localStorage.getItem('voicesentinel_selected_role') || 'agent';
+    setUserRole(savedRole);
+
     return () => subscription.unsubscribe();
   }, []);
+
+  // Dynamic nav links based on role
+  const navLinks = user ? (
+    userRole === 'admin' 
+      ? [
+          { href: '/', label: 'HOME' },
+          { href: '/admin', label: 'ADMIN' },
+          { href: '/calls', label: 'CALLS' },
+        ]
+      : [
+          { href: '/', label: 'HOME' },
+          { href: '/dashboard', label: 'DASHBOARD' },
+          { href: '/calls', label: 'CALLS' },
+        ]
+  ) : [
+    { href: '/', label: 'HOME' },
+  ];
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -113,9 +127,12 @@ export const Navbar = () => {
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="text-xs font-mono text-muted-foreground truncate max-w-32">
-                  {user.email}
-                </span>
+                <div className="text-right">
+                  <span className="text-xs font-mono text-muted-foreground truncate max-w-32 block">
+                    {user.email}
+                  </span>
+                  <span className="text-[10px] font-mono text-primary uppercase">{userRole}</span>
+                </div>
                 <Button 
                   variant="outline" 
                   size="sm" 
